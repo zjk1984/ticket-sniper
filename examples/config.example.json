@@ -1,0 +1,32 @@
+{
+  "event": {
+    "name": "周杰伦南宁演唱会",
+    "url": "https://detail.damai.cn/item.htm?id=XXXXXX",
+    "sessions": [
+      { "id": "session_1", "name": "2026-04-17 19:00", "priority": 1 },
+      { "id": "session_2", "name": "2026-04-18 19:00", "priority": 2 },
+      { "id": "session_3", "name": "2026-04-19 19:00", "priority": 3 }
+    ],
+    "ticketTypes": [
+      { "id": "price_1", "name": "内场2380元", "price": "2380", "priority": 1 },
+      { "id": "price_2", "name": "内场2080元", "price": "2080", "priority": 2 },
+      { "id": "price_3", "name": "内场1880元", "price": "1880", "priority": 3 },
+      { "id": "price_4", "name": "看台1380元", "price": "1380", "priority": 4 }
+    ]
+  },
+  "buyer": {
+    "name": "张三",
+    "idCard": "450XXXXXXXXXXX",
+    "phone": "138XXXXXXXX"
+  },
+  "snipe": {
+    "startTime": "2026-03-12T11:38:00+08:00",
+    "maxRetries": 100,
+    "retryIntervalMs": 50,
+    "advanceMs": 3000
+  },
+  "notify": {
+    "channels": ["feishu", "console"],
+    "feishuWebhook": "${FEISHU_WEBHOOK_URL}"
+  }
+}
