@@ -5,8 +5,8 @@
  * 功能：定时抢票、多次重试、验证码处理、结果通知
  */
 
-import { chromium } from 'playwright';
 import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { launchBrowser, DEFAULT_USER_AGENT, mobileContextOptions } from '../lib/browser.mjs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -71,21 +71,16 @@ function loadConfig(configPath) {
  * 初始化浏览器
  */
 async function initBrowser(options = {}) {
-  const { headless = false } = options;
+  const { headless = false, useMobile = false } = options;
   
-  log('正在启动浏览器...');
-  const browser = await chromium.launch({
-    headless,
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process',
-    ]
-  });
+  log(`正在启动浏览器...${useMobile ? ' (移动端)' : ''}`);
+  const browser = await launchBrowser({ headless });
   
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  });
+  const context = await browser.newContext(
+    useMobile
+      ? mobileContextOptions()
+      : { viewport: { width: 1280, height: 800 }, userAgent: DEFAULT_USER_AGENT }
+  );
   
   // 加载已保存的 session
   if (existsSync(SESSION_FILE)) {
@@ -115,6 +110,38 @@ async function waitUntilSnipeTime(startTime, advanceMs = 5000) {
   log('即将开票，准备抢票！');
 }
 
+function resolveEventUrl(event) {
+  if (event.mobileUrl) return event.mobileUrl;
+  const match = event.url?.match(/id=(\d+)/);
+  if (event.useMobile !== false && match) {
+    return `https://m.damai.cn/shows/item.html?itemId=${match[1]}`;
+  }
+  return event.url;
+}
+
+async function findBuyAction(page, useMobile) {
+  if (useMobile) {
+    const bodyText = await page.evaluate(() => document.body?.innerText || '');
+    if (/缺货|已售罄|求加场/.test(bodyText) && !/立即购买|立即预订|选座购买/.test(bodyText)) {
+      return { type: 'soldout', bodyText: bodyText.slice(0, 200) };
+    }
+    const mobileBtn = page.getByText(/立即购买|立即预订|选座购买|马上抢/).first();
+    if (await mobileBtn.count()) {
+      return { type: 'button', element: mobileBtn };
+    }
+    return { type: 'none' };
+  }
+
+  const buyButton = await page.waitForSelector('.buybtn, .btn-buy, [class*="buy"]', { timeout: 3000 }).catch(() => null);
+  if (buyButton) return { type: 'button', element: buyButton };
+
+  const bodyText = await page.evaluate(() => document.body?.innerText || '');
+  if (/该渠道不支持/.test(bodyText)) {
+    return { type: 'app-only' };
+  }
+  return { type: 'none' };
+}
+
 /**
  * 抢票核心逻辑
  */
@@ -122,16 +149,37 @@ async function snipe(page, config) {
   const { event, snipe } = config;
   const maxRetries = snipe.maxRetries || 50;
   const retryInterval = snipe.retryIntervalMs || 100;
+  const useMobile = event.useMobile !== false && Boolean(event.mobileUrl || /detail\.damai\.cn/.test(event.url || ''));
+  const targetUrl = resolveEventUrl(event);
   
-  log(`正在访问: ${event.url}`);
-  await page.goto(event.url, { waitUntil: 'networkidle' });
+  log(`正在访问: ${targetUrl}`);
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       log(`第 ${attempt}/${maxRetries} 次尝试抢票...`);
       
-      // 等待购买按钮出现
-      const buyButton = await page.waitForSelector('.buybtn, .btn-buy, [class*="buy"]', { timeout: 3000 }).catch(() => null);
+      if (attempt > 1) {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await randomSleep(200, 400);
+      }
+
+      const buyAction = await findBuyAction(page, useMobile);
+
+      if (buyAction.type === 'app-only') {
+        log('PC 网页不支持购票，已自动切换移动端模式');
+        event.useMobile = true;
+        await page.goto(resolveEventUrl({ ...event, useMobile: true }), { waitUntil: 'domcontentloaded' });
+        continue;
+      }
+
+      if (buyAction.type === 'soldout') {
+        log(`当前缺货，继续监控回流票... (${attempt}/${maxRetries})`);
+        await sleep(Math.max(retryInterval, 500));
+        continue;
+      }
+
+      const buyButton = buyAction.type === 'button' ? buyAction.element : null;
       
       if (!buyButton) {
         // 可能还没开票，检查是否有倒计时
@@ -159,7 +207,9 @@ async function snipe(page, config) {
       
       // 点击购买
       if (buyButton) {
-        await buyButton.click();
+        await buyButton.click({ timeout: 5000 }).catch(async () => {
+          await buyButton.click({ force: true });
+        });
         await randomSleep(200, 500);
         
         // 检查是否进入订单确认页
@@ -169,12 +219,16 @@ async function snipe(page, config) {
           log('已进入订单确认页！');
           
           // 选择观演人
-          if (event.buyer) {
-            const buyerCheckbox = await page.$('[class*="buyer"], [class*="audience"]');
-            if (buyerCheckbox) {
-              await buyerCheckbox.click();
-              await randomSleep(100, 200);
+          const buyers = config.buyers || (config.buyer ? [config.buyer] : []);
+          for (const buyer of buyers) {
+            const row = page.locator('[class*="buyer"], [class*="audience"]').filter({ hasText: buyer.name }).first();
+            if (await row.count()) {
+              await row.click();
+              log(`已选择观演人: ${buyer.name}`);
+            } else {
+              await page.getByText(buyer.name).first().click().catch(() => log(`未找到观演人: ${buyer.name}`));
             }
+            await randomSleep(100, 200);
           }
           
           // 提交订单
@@ -267,7 +321,9 @@ async function main() {
       log('[模拟运行] 不会实际提交订单');
     }
     
-    const { browser, page } = await initBrowser({ headless });
+    const useMobile = config.event?.useMobile !== false
+      && Boolean(config.event?.mobileUrl || /detail\.damai\.cn/.test(config.event?.url || ''));
+    const { browser, page } = await initBrowser({ headless, useMobile });
     
     try {
       // 等待抢票时间
