@@ -34,7 +34,7 @@
   "ticketCount": 2,
   "snipe": {
     "startTime": "2026-09-12T00:00:00+08:00",
-    "maxRetries": 500,
+    "maxRetries": 1000,
     "retryIntervalMs": 800,
     "advanceMs": 0
   },
