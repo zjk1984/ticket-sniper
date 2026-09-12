@@ -215,6 +215,15 @@ async function snipe(page, config) {
 
       const buyAction = await findBuyAction(page, useMobile);
 
+      const progressEvery = snipeConfig.progressEveryAttempts ?? 100;
+      if (progressEvery > 0 && attempt % progressEvery === 0) {
+        const status =
+          buyAction.type === 'soldout' ? '缺货，持续监控' :
+          buyAction.type === 'button' ? '检测到有票' :
+          buyAction.type === 'app-only' ? '渠道切换中' : '监控中';
+        await notifyProgress(config, attempt, maxRetries, endMs, status);
+      }
+
       if (buyAction.type === 'app-only') {
         log('PC 网页不支持购票，已自动切换移动端模式');
         if (!abnormalNotified) {
@@ -493,6 +502,29 @@ async function notifyMonitorEnd(config, message) {
       fields: [
         { label: '演出', value: config.event.name, short: false },
         { label: '结果', value: message, short: false },
+      ],
+    }
+  );
+}
+
+async function notifyProgress(config, attempt, maxRetries, endMs, status) {
+  const remainingMs = endMs ? Math.max(endMs - Date.now(), 0) : null;
+  const remainingHours = remainingMs != null ? (remainingMs / 3600000).toFixed(1) : null;
+
+  await sendNotification(
+    '📊 监控进度汇报',
+    `已完成 ${attempt} 次尝试，当前状态：${status}`,
+    config,
+    {
+      kind: 'info',
+      fields: [
+        { label: '演出', value: config.event.name, short: false },
+        { label: '进度', value: `第 ${attempt} / ${maxRetries} 次` },
+        { label: '当前状态', value: status },
+        ...(remainingHours != null
+          ? [{ label: '距截止', value: `约 ${remainingHours} 小时` }]
+          : []),
+        { label: '监控截止', value: formatEndTime(endMs) },
       ],
     }
   );

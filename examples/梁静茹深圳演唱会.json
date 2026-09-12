@@ -37,6 +37,7 @@
     "endTime": "00:00:00+08:00",
     "maxRetries": 2000,
     "retryIntervalMs": 800,
+    "progressEveryAttempts": 100,
     "advanceMs": 0
   },
   "notify": {
