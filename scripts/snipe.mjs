@@ -94,6 +94,54 @@ async function initBrowser(options = {}) {
   return { browser, context, page };
 }
 
+function isBrowserDeadError(error) {
+  return /browser has been closed|Target page, context or browser has been closed|Protocol error.*Target closed/i.test(error?.message || '');
+}
+
+async function closeBrowserSafe(browser) {
+  if (!browser) return;
+  try {
+    await browser.close();
+  } catch (_) {
+    // 浏览器可能已关闭
+  }
+}
+
+async function recoverBrowser(session, targetUrl, config, attempt) {
+  log('检测到浏览器已关闭，正在重新打开...');
+  await closeBrowserSafe(session.browser);
+
+  const { browser, page } = await initBrowser({
+    headless: session.headless,
+    useMobile: session.useMobile,
+  });
+  session.browser = browser;
+  session.page = page;
+
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+  log('浏览器已重新打开，继续监控');
+
+  const now = Date.now();
+  if (now - (session.lastBrowserRecoverNotify || 0) > 10 * 60 * 1000) {
+    session.lastBrowserRecoverNotify = now;
+    await sendNotification(
+      '🔄 浏览器已重新打开',
+      '检测到浏览器窗口被关闭，已自动重启并恢复监控。',
+      config,
+      {
+        kind: 'warning',
+        fields: [
+          { label: '演出', value: config.event.name, short: false },
+          { label: '尝试次数', value: `第 ${attempt} 次` },
+          { label: '状态', value: '已恢复监控' },
+        ],
+      }
+    );
+  }
+
+  return session;
+}
+
 /**
  * 等待抢票时间
  */
@@ -177,7 +225,7 @@ async function findBuyAction(page, useMobile) {
 /**
  * 抢票核心逻辑
  */
-async function snipe(page, config) {
+async function snipe(session, config) {
   const { event, snipe: snipeConfig } = config;
   const maxRetries = snipeConfig.maxRetries || 50;
   const retryInterval = snipeConfig.retryIntervalMs || 100;
@@ -187,6 +235,7 @@ async function snipe(page, config) {
   let ticketNotified = false;
   let consecutiveErrors = 0;
   let abnormalNotified = false;
+  let page = session.page;
 
   if (endMs) {
     log(`监控结束时间: ${new Date(endMs).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
@@ -199,6 +248,8 @@ async function snipe(page, config) {
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      page = session.page;
+
       if (endMs && Date.now() >= endMs) {
         log('已到监控结束时间，停止监控');
         const message = '监控时段结束（至 00:00），未抢到票';
@@ -340,18 +391,29 @@ async function snipe(page, config) {
       log(`尝试 ${attempt} 失败: ${error.message}`);
       consecutiveErrors += 1;
 
-      const isBrowserDead = /browser has been closed|Target page, context or browser has been closed/i.test(error.message);
+      const browserDead = isBrowserDeadError(error);
       const isLoginIssue = /login|登录|未登录|session/i.test(error.message);
 
-      if (isBrowserDead && !abnormalNotified) {
-        await notifyAbnormal(
-          config,
-          '❌ 浏览器异常',
-          `浏览器或页面已关闭：${error.message}\n请检查桌面 Chrome 窗口是否被手动关闭。`,
-          attempt
-        );
-        abnormalNotified = true;
-      } else if (isLoginIssue && !abnormalNotified) {
+      if (browserDead) {
+        try {
+          await recoverBrowser(session, targetUrl, config, attempt);
+          consecutiveErrors = 0;
+          abnormalNotified = false;
+          attempt -= 1;
+          continue;
+        } catch (recoverError) {
+          log(`浏览器恢复失败: ${recoverError.message}`);
+          await notifyAbnormal(
+            config,
+            '❌ 浏览器恢复失败',
+            `自动重启浏览器失败：${recoverError.message}`,
+            attempt
+          );
+          return { success: false, message: `浏览器恢复失败: ${recoverError.message}` };
+        }
+      }
+
+      if (isLoginIssue && !abnormalNotified) {
         await notifyAbnormal(
           config,
           '⚠️ 登录状态异常',
@@ -367,10 +429,6 @@ async function snipe(page, config) {
           attempt
         );
         abnormalNotified = true;
-      }
-
-      if (isBrowserDead) {
-        return { success: false, message: `浏览器异常退出: ${error.message}` };
       }
 
       await sleep(retryInterval);
@@ -557,20 +615,21 @@ async function main() {
     const useMobile = config.event?.useMobile !== false
       && Boolean(config.event?.mobileUrl || /detail\.damai\.cn/.test(config.event?.url || ''));
     const { browser, page } = await initBrowser({ headless, useMobile });
+    const session = { browser, page, headless, useMobile, lastBrowserRecoverNotify: 0 };
     
     try {
       // 等待抢票时间
       await waitUntilSnipeTime(config.snipe.startTime, config.snipe.advanceMs);
       
       // 处理验证码（如果有）
-      await handleCaptcha(page, config);
+      await handleCaptcha(session.page, config);
       
       // 开始抢票
       let result;
       if (dryRun) {
         result = { success: false, message: '模拟运行结束' };
       } else {
-        result = await snipe(page, config);
+        result = await snipe(session, config);
       }
       
       // 发送结果通知（监控正常结束已在 snipe 内通知）
@@ -611,7 +670,7 @@ async function main() {
       
     } finally {
       if (!dryRun && !process.env.KEEP_BROWSER) {
-        await browser.close();
+        await closeBrowserSafe(session.browser);
       }
     }
     
