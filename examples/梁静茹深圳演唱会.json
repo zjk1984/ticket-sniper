@@ -14,11 +14,9 @@
       }
     ],
     "ticketTypes": [
-      { "id": "1299", "name": "内场1299元", "price": "1299", "priority": 1 },
-      { "id": "1099", "name": "内场1099元", "price": "1099", "priority": 2 },
-      { "id": "899", "name": "看台899元", "price": "899", "priority": 3 },
-      { "id": "699", "name": "看台699元", "price": "699", "priority": 4 },
-      { "id": "499", "name": "看台499元", "price": "499", "priority": 5 }
+      { "id": "899", "name": "看台899元", "price": "899", "priority": 1 },
+      { "id": "699", "name": "看台699元", "price": "699", "priority": 2 },
+      { "id": "499", "name": "看台499元", "price": "499", "priority": 3 }
     ]
   },
   "buyers": [
