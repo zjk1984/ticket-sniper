@@ -107,9 +107,24 @@ async function main() {
   // 通知配置
   console.log('\n📢 通知配置');
   const notifyFeishu = await questionMultiple('通知方式', ['飞书', '控制台', '飞书+控制台']);
+  let feishuMode = 'webhook';
   let feishuWebhook = '';
+  let feishuAppId = '';
+  let feishuAppSecret = '';
+  let feishuReceiveId = '';
+  let feishuReceiveIdType = 'chat_id';
+
   if (notifyFeishu.includes('飞书')) {
-    feishuWebhook = await question('飞书 Webhook URL (或环境变量 ${FEISHU_WEBHOOK_URL})', '${FEISHU_WEBHOOK_URL}');
+    const feishuMethod = await questionMultiple('飞书通知方式', ['应用 API (App ID)', 'Webhook 机器人']);
+    if (feishuMethod.includes('应用 API')) {
+      feishuMode = 'app';
+      feishuAppId = await question('飞书 App ID (或环境变量 ${FEISHU_APP_ID})', '${FEISHU_APP_ID}');
+      feishuAppSecret = await question('飞书 App Secret (或环境变量 ${FEISHU_APP_SECRET})', '${FEISHU_APP_SECRET}');
+      feishuReceiveId = await question('接收消息 ID (chat_id/open_id，或 ${FEISHU_RECEIVE_ID})', '${FEISHU_RECEIVE_ID}');
+      feishuReceiveIdType = await question('接收 ID 类型 (chat_id/open_id/user_id)', 'chat_id');
+    } else {
+      feishuWebhook = await question('飞书 Webhook URL (或环境变量 ${FEISHU_WEBHOOK_URL})', '${FEISHU_WEBHOOK_URL}');
+    }
   }
   
   // 生成配置
@@ -133,7 +148,17 @@ async function main() {
     },
     notify: {
       channels: notifyFeishu.includes('飞书') ? ['feishu', 'console'] : ['console'],
-      feishuWebhook
+      ...(notifyFeishu.includes('飞书') ? {
+        feishuMode,
+        ...(feishuMode === 'app' ? {
+          feishuAppId,
+          feishuAppSecret,
+          feishuReceiveId,
+          feishuReceiveIdType
+        } : {
+          feishuWebhook
+        })
+      } : {})
     }
   };
   

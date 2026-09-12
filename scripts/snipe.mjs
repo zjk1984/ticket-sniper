@@ -10,6 +10,7 @@ import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
+import { notify } from '../lib/notify.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOG_DIR = join(homedir(), '.ticket-sniper', 'logs');
@@ -206,14 +207,14 @@ async function snipe(page, config) {
 /**
  * 处理验证码
  */
-async function handleCaptcha(page) {
+async function handleCaptcha(page, config) {
   // 检测是否有验证码
   const captcha = await page.$('[class*="captcha"], [class*="verify"], .slider');
   
   if (captcha) {
     log('检测到验证码，请手动完成验证...');
     // 发送通知
-    await sendNotification('需要处理验证码', '请在浏览器中完成验证码验证');
+    await sendNotification('需要处理验证码', '请在浏览器中完成验证码验证', config);
     
     // 等待用户完成验证码
     await page.waitForSelector('[class*="captcha"]', { state: 'hidden', timeout: 60000 }).catch(() => {});
@@ -224,25 +225,18 @@ async function handleCaptcha(page) {
 /**
  * 发送通知
  */
-async function sendNotification(title, message) {
-  // 飞书通知
-  const webhookUrl = process.env.FEISHU_WEBHOOK_URL;
-  if (webhookUrl) {
-    try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          msg_type: 'text',
-          content: { text: `${title}\n${message}` }
-        })
-      });
-    } catch (error) {
-      log(`飞书通知发送失败: ${error.message}`);
-    }
-  }
-  
-  // 控制台输出
+async function sendNotification(title, message, config = null) {
+  const notifyConfig = config?.notify || {
+    channels: ['feishu', 'console'],
+    feishuMode: process.env.FEISHU_APP_ID ? 'app' : 'webhook',
+    feishuAppId: process.env.FEISHU_APP_ID,
+    feishuAppSecret: process.env.FEISHU_APP_SECRET,
+    feishuReceiveId: process.env.FEISHU_RECEIVE_ID,
+    feishuReceiveIdType: process.env.FEISHU_RECEIVE_ID_TYPE || 'chat_id',
+    feishuWebhook: process.env.FEISHU_WEBHOOK_URL
+  };
+
+  await notify(notifyConfig, title, message);
   log(`[通知] ${title}: ${message}`);
 }
 
@@ -261,8 +255,9 @@ async function main() {
     process.exit(1);
   }
   
+  let config = null;
   try {
-    const config = loadConfig(configPath);
+    config = loadConfig(configPath);
     log('配置加载成功');
     
     if (dryRun) {
@@ -276,7 +271,7 @@ async function main() {
       await waitUntilSnipeTime(config.snipe.startTime, config.snipe.advanceMs);
       
       // 处理验证码（如果有）
-      await handleCaptcha(page);
+      await handleCaptcha(page, config);
       
       // 开始抢票
       let result;
@@ -289,7 +284,8 @@ async function main() {
       // 发送结果通知
       await sendNotification(
         result.success ? '🎉 抢票成功' : '😢 抢票失败',
-        result.message
+        result.message,
+        config
       );
       
       // 如果成功，保持浏览器打开让用户支付
@@ -307,7 +303,7 @@ async function main() {
     
   } catch (error) {
     log(`错误: ${error.message}`);
-    await sendNotification('抢票脚本错误', error.message);
+    await sendNotification('抢票脚本错误', error.message, config);
     process.exit(1);
   }
 }

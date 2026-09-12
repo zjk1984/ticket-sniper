@@ -27,6 +27,11 @@
   },
   "notify": {
     "channels": ["feishu", "console"],
+    "feishuMode": "app",
+    "feishuAppId": "${FEISHU_APP_ID}",
+    "feishuAppSecret": "${FEISHU_APP_SECRET}",
+    "feishuReceiveId": "${FEISHU_RECEIVE_ID}",
+    "feishuReceiveIdType": "chat_id",
     "feishuWebhook": "${FEISHU_WEBHOOK_URL}"
   }
 }

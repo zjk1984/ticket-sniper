@@ -118,6 +118,10 @@ node {baseDir}/scripts/status.mjs
   },
   "notify": {
     "channels": ["feishu", "system"],
+    "feishuMode": "app",
+    "feishuAppId": "${FEISHU_APP_ID}",
+    "feishuAppSecret": "${FEISHU_APP_SECRET}",
+    "feishuReceiveId": "${FEISHU_RECEIVE_ID}",
     "feishuWebhook": "${FEISHU_WEBHOOK_URL}"
   }
 }
@@ -127,7 +131,7 @@ node {baseDir}/scripts/status.mjs
 
 抢票结果会通过以下方式通知：
 
-1. **飞书通知**：配置 webhook 后自动推送
+1. **飞书通知**：支持应用 API（App ID + Secret）或 Webhook 机器人
 2. **系统通知**：macOS/Linux 桌面通知
 3. **控制台输出**：实时状态显示
 
