@@ -98,22 +98,101 @@ async function initBrowser(options = {}) {
 /**
  * 等待抢票时间
  */
-async function waitUntilSnipeTime(startTime, advanceMs = 5000) {
+async function waitUntilSnipeTime(startTime, advanceMs = 5000, options = {}) {
+  const { waitForOpen = false, pollIntervalMs = 60000 } = options;
+
+  if (waitForOpen || !startTime) {
+    log('未设置开票时间，进入「等待开票」模式（轮询页面状态）');
+    return { waitForOpen: true };
+  }
+
   const targetTime = new Date(startTime).getTime();
+  if (Number.isNaN(targetTime)) {
+    log('开票时间格式无效，进入「等待开票」模式');
+    return { waitForOpen: true };
+  }
+
   const now = Date.now();
   const waitTime = targetTime - now - advanceMs;
-  
+
   if (waitTime > 0) {
     log(`距离开票时间还有 ${Math.floor(waitTime / 1000)} 秒，等待中...`);
     await sleep(waitTime);
   }
-  
+
   log('即将开票，准备抢票！');
+  return { waitForOpen: false };
+}
+
+async function waitUntilSaleOpens(page, config) {
+  const pollInterval = config.snipe.pollIntervalMs || 60000;
+  const targetSession = config.event.sessions?.[0]?.name || '目标场次';
+  log(`等待正式开票：${targetSession}（每 ${Math.floor(pollInterval / 1000)} 秒检查一次）`);
+
+  for (let i = 1; ; i++) {
+    const targetUrl = resolveEventUrl(config.event);
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+    await sleep(2000);
+
+    const status = await page.evaluate(() => {
+      const text = document.body?.innerText || '';
+      const canBuy = /立即购买|立即预订|选座购买|马上抢/.test(text);
+      const reserved = /预约|已预约|已想看/.test(text);
+      const presale = /预售|正式开票后将第一时间配票/.test(text);
+      const soldout = /缺货|已售罄/.test(text) && !canBuy;
+      return { canBuy, reserved, presale, soldout, snippet: text.slice(0, 300) };
+    });
+
+    if (status.canBuy) {
+      log('检测到可购买，开始抢票！');
+      return;
+    }
+
+    const msg = status.presale
+      ? '仍为预售/预约阶段，继续等待正式开票...'
+      : status.soldout
+        ? '当前显示缺货，继续监控...'
+        : '尚未开放购买，继续等待...';
+    log(`[${i}] ${msg}`);
+    await sleep(pollInterval);
+  }
+}
+
+async function selectSession(page, session, useMobile) {
+  if (!session) return;
+  if (useMobile && session.name) {
+    const dateHint = session.name.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (dateHint) {
+      const [, , month, day] = dateHint;
+      const patterns = [
+        `${month}.${day}`,
+        `${Number(month)}.${Number(day)}`,
+        `${month}/${day}`,
+        `${month}月${day}日`,
+      ];
+      for (const p of patterns) {
+        const tab = page.getByText(p, { exact: false }).first();
+        if (await tab.count()) {
+          await tab.click().catch(() => {});
+          log(`已选择场次: ${session.name}`);
+          await randomSleep(200, 400);
+          return;
+        }
+      }
+    }
+  }
+  const sessionSelector = `[data-session="${session.id}"], .session-item:nth-child(1)`;
+  await page.click(sessionSelector).catch(() => {});
+  log(`已选择场次: ${session.name || session.id}`);
+  await randomSleep(100, 300);
 }
 
 async function findBuyAction(page, useMobile) {
   if (useMobile) {
     const bodyText = await page.evaluate(() => document.body?.innerText || '');
+    if (/预约/.test(bodyText) && !/立即购买|立即预订|选座购买|马上抢/.test(bodyText)) {
+      return { type: 'waiting' };
+    }
     if (/缺货|已售罄|求加场/.test(bodyText) && !/立即购买|立即预订|选座购买/.test(bodyText)) {
       return { type: 'soldout', bodyText: bodyText.slice(0, 200) };
     }
@@ -165,6 +244,12 @@ async function snipe(page, config) {
         continue;
       }
 
+      if (buyAction.type === 'waiting') {
+        log('当前为预约阶段，等待正式开票...');
+        await sleep(Math.max(retryInterval, 500));
+        continue;
+      }
+
       if (buyAction.type === 'soldout') {
         log(`当前缺货，继续监控回流票... (${attempt}/${maxRetries})`);
         await sleep(Math.max(retryInterval, 500));
@@ -185,9 +270,7 @@ async function snipe(page, config) {
       
       // 选择场次（如果需要）
       if (event.sessions && event.sessions.length > 0) {
-        const sessionSelector = `[data-session="${event.sessions[0].id}"], .session-item:nth-child(1)`;
-        await page.click(sessionSelector).catch(() => {});
-        await randomSleep(100, 300);
+        await selectSession(page, event.sessions[0], useMobile);
       }
       
       // 选择票档（如果需要）
@@ -317,9 +400,16 @@ async function main() {
     const { browser, page } = await initBrowser({ headless, useMobile });
     
     try {
-      // 等待抢票时间
-      await waitUntilSnipeTime(config.snipe.startTime, config.snipe.advanceMs);
-      
+      // 等待抢票时间或开票开放
+      const waitMode = await waitUntilSnipeTime(
+        config.snipe.startTime,
+        config.snipe.advanceMs,
+        { waitForOpen: config.snipe.waitForOpen, pollIntervalMs: config.snipe.pollIntervalMs }
+      );
+      if (waitMode.waitForOpen) {
+        await waitUntilSaleOpens(page, config);
+      }
+
       // 处理验证码（如果有）
       await handleCaptcha(page, config);
       
