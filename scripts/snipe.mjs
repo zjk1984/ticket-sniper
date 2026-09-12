@@ -110,6 +110,38 @@ async function waitUntilSnipeTime(startTime, advanceMs = 5000) {
   log('即将开票，准备抢票！');
 }
 
+/**
+ * 解析每日监控结束时间（00:00 表示当日午夜，即次日 0 点）
+ */
+function resolveMonitorEndTime(endTime) {
+  if (!endTime) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}T/.test(endTime)) {
+    return new Date(endTime).getTime();
+  }
+
+  const match = endTime.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = parseInt(match[3] || '0', 10);
+  const now = new Date();
+  const end = new Date(now);
+
+  end.setHours(hours, minutes, seconds, 0);
+
+  // 00:00 表示当天结束时的午夜（次日 0 点）
+  if (hours === 0 && minutes === 0) {
+    end.setDate(end.getDate() + 1);
+    end.setHours(0, 0, 0, 0);
+  } else if (end.getTime() <= now.getTime()) {
+    end.setDate(end.getDate() + 1);
+  }
+
+  return end.getTime();
+}
+
 function resolveEventUrl(event) {
   if (event.mobileUrl) return event.mobileUrl;
   const match = event.url?.match(/id=(\d+)/);
@@ -146,17 +178,27 @@ async function findBuyAction(page, useMobile) {
  * 抢票核心逻辑
  */
 async function snipe(page, config) {
-  const { event, snipe } = config;
-  const maxRetries = snipe.maxRetries || 50;
-  const retryInterval = snipe.retryIntervalMs || 100;
+  const { event, snipe: snipeConfig } = config;
+  const maxRetries = snipeConfig.maxRetries || 50;
+  const retryInterval = snipeConfig.retryIntervalMs || 100;
+  const endMs = resolveMonitorEndTime(snipeConfig.endTime);
   const useMobile = event.useMobile !== false && Boolean(event.mobileUrl || /detail\.damai\.cn/.test(event.url || ''));
   const targetUrl = resolveEventUrl(event);
+
+  if (endMs) {
+    log(`监控结束时间: ${new Date(endMs).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`);
+  }
   
   log(`正在访问: ${targetUrl}`);
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      if (endMs && Date.now() >= endMs) {
+        log('已到监控结束时间，停止监控');
+        return { success: false, message: '监控时段结束（至 00:00），未抢到票' };
+      }
+
       log(`第 ${attempt}/${maxRetries} 次尝试抢票...`);
       
       if (attempt > 1) {
@@ -174,7 +216,7 @@ async function snipe(page, config) {
       }
 
       if (buyAction.type === 'soldout') {
-        log(`当前缺货，继续监控回流票... (${attempt}/${maxRetries})`);
+        log(`当前缺货，继续监控回流票... (${attempt}${endMs ? '' : `/${maxRetries}`})`);
         await sleep(Math.max(retryInterval, 500));
         continue;
       }
