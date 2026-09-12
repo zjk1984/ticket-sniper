@@ -90,15 +90,35 @@ node scripts/snipe.mjs --config ~/.ticket-sniper/configs/你的配置.json --dry
 | `snipe.maxRetries` | 最大重试次数 |
 | `snipe.retryIntervalMs` | 重试间隔（毫秒）|
 | `notify.channels` | 通知渠道：feishu, console |
-| `notify.feishuWebhook` | 飞书机器人 Webhook URL |
+| `notify.feishuMode` | 飞书模式：`app`（应用 API）或 `webhook` |
+| `notify.feishuAppId` | 飞书应用 App ID |
+| `notify.feishuAppSecret` | 飞书应用 App Secret |
+| `notify.feishuReceiveId` | 接收消息的 chat_id / open_id |
+| `notify.feishuReceiveIdType` | 接收 ID 类型，默认 `chat_id` |
+| `notify.feishuWebhook` | 飞书机器人 Webhook URL（webhook 模式） |
 
 ## 通知配置
 
-### 飞书通知
+### 飞书通知（应用 API，推荐）
 
-1. 创建飞书机器人获取 Webhook URL
+1. 在[飞书开放平台](https://open.feishu.cn/)创建企业自建应用
+2. 开启机器人能力，并添加 `im:message:send_as_bot` 权限
+3. 将机器人添加到目标群聊，获取 `chat_id`
+4. 设置环境变量：
+
+```bash
+export FEISHU_APP_ID=cli_xxxxxxxx
+export FEISHU_APP_SECRET=xxxxxxxx
+export FEISHU_RECEIVE_ID=oc_xxxxxxxx
+```
+
+5. 配置文件中设置 `"feishuMode": "app"`
+
+### 飞书通知（Webhook）
+
+1. 创建飞书自定义机器人获取 Webhook URL
 2. 设置环境变量：`export FEISHU_WEBHOOK_URL=https://...`
-3. 或在配置文件中直接填写
+3. 配置 `"feishuMode": "webhook"`
 
 ## 依赖说明
 
