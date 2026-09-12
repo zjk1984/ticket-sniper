@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 每日定时启动 ticket-sniper 回流票监控（供 crontab 调用）
+# 每日 7:00 启动回流票监控，脚本内 endTime=00:00 控制至午夜停止（供 crontab 调用）
 #
 # 手动运行:
 #   ./scripts/snipe-cron.sh
