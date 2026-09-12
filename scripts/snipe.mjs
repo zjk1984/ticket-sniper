@@ -11,6 +11,9 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { notify } from '../lib/notify.mjs';
+import loadEnvFile from '../lib/load-env.mjs';
+
+loadEnvFile();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOG_DIR = join(homedir(), '.ticket-sniper', 'logs');

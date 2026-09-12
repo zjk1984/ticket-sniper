@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 *.log
 .ticket-sniper/
+.env
+.env.local
