@@ -1,0 +1,35 @@
+{
+  "event": {
+    "name": "梁静茹深圳站 - Best,茹果我不唱情歌",
+    "url": "https://detail.damai.cn/item.htm?id=1053720556008",
+    "mobileUrl": "https://m.damai.cn/shows/item.html?itemId=1053720556008",
+    "useMobile": true,
+    "sessions": [
+      {
+        "id": "session_1",
+        "name": "2026-10-17 19:30 深圳站",
+        "priority": 1
+      }
+    ],
+    "ticketTypes": [
+      { "id": "price_1", "name": "看台499元", "price": "499", "priority": 4 },
+      { "id": "price_2", "name": "内场1299元", "price": "1299", "priority": 1 }
+    ]
+  },
+  "buyer": {
+    "name": "请填写观演人姓名",
+    "idCard": "请填写身份证号",
+    "phone": "请填写手机号"
+  },
+  "snipe": {
+    "startTime": "2026-09-12T00:00:00+08:00",
+    "maxRetries": 500,
+    "retryIntervalMs": 800,
+    "advanceMs": 0
+  },
+  "notify": {
+    "channels": ["console"],
+    "feishuMode": "webhook",
+    "feishuWebhook": "${FEISHU_WEBHOOK_URL}"
+  }
+}
