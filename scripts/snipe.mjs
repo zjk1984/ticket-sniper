@@ -12,6 +12,7 @@ import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { notify } from '../lib/notify.mjs';
 import loadEnvFile from '../lib/load-env.mjs';
+import { shouldUseMobile, resolveEventUrl } from '../lib/damai.mjs';
 
 loadEnvFile();
 
@@ -110,15 +111,6 @@ async function waitUntilSnipeTime(startTime, advanceMs = 5000) {
   log('即将开票，准备抢票！');
 }
 
-function resolveEventUrl(event) {
-  if (event.mobileUrl) return event.mobileUrl;
-  const match = event.url?.match(/id=(\d+)/);
-  if (event.useMobile !== false && match) {
-    return `https://m.damai.cn/shows/item.html?itemId=${match[1]}`;
-  }
-  return event.url;
-}
-
 async function findBuyAction(page, useMobile) {
   if (useMobile) {
     const bodyText = await page.evaluate(() => document.body?.innerText || '');
@@ -149,7 +141,7 @@ async function snipe(page, config) {
   const { event, snipe } = config;
   const maxRetries = snipe.maxRetries || 50;
   const retryInterval = snipe.retryIntervalMs || 100;
-  const useMobile = event.useMobile !== false && Boolean(event.mobileUrl || /detail\.damai\.cn/.test(event.url || ''));
+  const useMobile = shouldUseMobile(event);
   const targetUrl = resolveEventUrl(event);
   
   log(`正在访问: ${targetUrl}`);
@@ -321,8 +313,7 @@ async function main() {
       log('[模拟运行] 不会实际提交订单');
     }
     
-    const useMobile = config.event?.useMobile !== false
-      && Boolean(config.event?.mobileUrl || /detail\.damai\.cn/.test(config.event?.url || ''));
+    const useMobile = shouldUseMobile(config.event);
     const { browser, page } = await initBrowser({ headless, useMobile });
     
     try {

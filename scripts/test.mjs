@@ -5,7 +5,7 @@
  * 验证环境和配置是否正确
  */
 
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -51,7 +51,7 @@ checks.push({
 // 5. 配置文件
 const configDir = join(DATA_DIR, 'configs');
 if (existsSync(configDir)) {
-  const configs = require('fs').readdirSync(configDir).filter(f => f.endsWith('.json'));
+  const configs = readdirSync(configDir).filter(f => f.endsWith('.json'));
   checks.push({ 
     name: '配置文件', 
     status: configs.length > 0, 

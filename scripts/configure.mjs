@@ -10,6 +10,7 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
+import { eventFromUrl, extractItemId } from '../lib/damai.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(homedir(), '.ticket-sniper');
@@ -57,7 +58,13 @@ async function main() {
   // 基本信息
   console.log('\n📋 演出信息');
   const eventName = await question('演出名称', '周杰伦南宁演唱会');
-  const eventUrl = await question('演出页面 URL (如: https://detail.damai.cn/item.htm?id=XXXXXX)');
+  const eventUrl = await question(
+    '演出页面 URL (PC 或移动端均可，如: https://m.damai.cn/shows/item.html?itemId=XXXXXX)'
+  );
+  const itemId = extractItemId(eventUrl);
+  if (itemId) {
+    console.log(`  → 已识别 itemId: ${itemId}${/m\.damai\.cn/i.test(eventUrl) ? '，将使用移动端 H5 抢票' : ''}`);
+  }
   
   // 场次配置
   console.log('\n📅 场次配置');
@@ -131,9 +138,9 @@ async function main() {
   const config = {
     event: {
       name: eventName,
-      url: eventUrl,
+      ...eventFromUrl(eventUrl),
       sessions,
-      ticketTypes
+      ticketTypes,
     },
     buyer: {
       name: buyerName,
