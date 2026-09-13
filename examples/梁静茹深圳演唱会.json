@@ -1,0 +1,51 @@
+{
+  "event": {
+    "name": "梁静茹《Best, 茹果我不唱情歌》巡回演唱会 - 深圳",
+    "url": "https://detail.damai.cn/item.htm?id=1053720556008",
+    "mobileUrl": "https://m.damai.cn/shows/item.html?itemId=1053720556008",
+    "useMobile": true,
+    "venue": "深圳湾体育中心「春茧」体育场",
+    "sessions": [
+      {
+        "id": "1053720556008",
+        "name": "2026-10-17 19:30",
+        "priority": 1,
+        "note": "深圳站，当前大麦显示缺货/预售，适合回流票监控"
+      }
+    ],
+    "ticketTypes": [
+      { "id": "899", "name": "看台899元", "price": "899", "priority": 1 },
+      { "id": "699", "name": "看台699元", "price": "699", "priority": 2 },
+      { "id": "499", "name": "看台499元", "price": "499", "priority": 3 }
+    ]
+  },
+  "buyers": [
+    {
+      "name": "观演人1姓名",
+      "idCard": "观演人1身份证号",
+      "phone": "观演人1手机号"
+    },
+    {
+      "name": "观演人2姓名",
+      "idCard": "观演人2身份证号",
+      "phone": "观演人2手机号"
+    }
+  ],
+  "ticketCount": 2,
+  "snipe": {
+    "startTime": "2026-09-12T07:00:00+08:00",
+    "endTime": "00:00:00+08:00",
+    "maxRetries": 2000,
+    "retryIntervalMs": 800,
+    "progressEveryAttempts": 100,
+    "advanceMs": 0
+  },
+  "notify": {
+    "channels": ["feishu", "console"],
+    "feishuMode": "app",
+    "feishuAppId": "${FEISHU_APP_ID}",
+    "feishuAppSecret": "${FEISHU_APP_SECRET}",
+    "feishuReceiveId": "${FEISHU_RECEIVE_ID}",
+    "feishuReceiveIdType": "chat_id"
+  }
+}

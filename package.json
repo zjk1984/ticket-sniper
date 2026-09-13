@@ -6,7 +6,9 @@
   "scripts": {
     "login": "node scripts/login.mjs",
     "configure": "node scripts/configure.mjs",
+    "install-config": "node scripts/install-config.mjs",
     "snipe": "node scripts/snipe.mjs",
+    "snipe-schedule": "bash scripts/snipe-schedule-install.sh",
     "test": "node scripts/test.mjs",
     "test-feishu": "node scripts/test-feishu.mjs"
   },
